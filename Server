@@ -1,0 +1,53 @@
+""" ********************************************************************************
+* Name     : Server
+* Purpose  : 수집서버 구현
+* Input    : 아래 코드 파워쉘에서 붙여넣고 엔터
+* Output   : ✅ TCP 서버 실행됨. [211.53.249.184:1992] 에서 대기 중...
+* Period   : 비주기
+* Limit    :
+    - 211.53.249.184:1992 방화벽에 등록
+    - 서기대 사무실PC 에서 첫 시험성공
+    - 클라이언트는 아무PC 에서나 테스트 해도 동작가능
+* Modify   : "2025-04-06"
+* Author   : 서기대
+* Memo     : 첫번째 테스트를 위해 명령어 3개만 만들어 봄
+******************************************************************************** """
+# 서버.ps1
+$ip = [System.Net.IPAddress]::Parse("211.53.249.184")
+$port = 1992
+$listener = [System.Net.Sockets.TcpListener]::new($ip, $port)
+$listener.Start()
+
+Write-Host "✅ TCP 서버 실행됨. [$($ip):$port] 에서 대기 중..."
+
+while ($true) {
+    $client = $listener.AcceptTcpClient()
+    $stream = $client.GetStream()
+    $buffer = New-Object byte[] 1024
+
+    $bytesRead = $stream.Read($buffer, 0, $buffer.Length)
+    if ($bytesRead -gt 0) {
+        $message = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $bytesRead)
+        Write-Host "📩 클라이언트로부터 받은 메시지: $message"
+
+        # 응답 메시지 준비
+        $responseText = switch ($message.Trim()) {
+            "AAA" { "가나다" }
+            "BBB" { "라마바" }
+            "CCC" { "마지막" }
+            default { "알 수 없는 명령입니다." }
+        }
+
+        # 타임스탬프 포함한 응답 전송
+        $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        $fullResponse = "$timestamp : $responseText"
+        $response = [System.Text.Encoding]::UTF8.GetBytes($fullResponse)
+        $stream.Write($response, 0, $response.Length)
+    }
+
+    $stream.Close()
+    $client.Close()
+    Write-Host "🔁 다음 클라이언트 대기 중..."
+}
+
+# listener.Stop() 은 따로 안 넣었음 — 강제로 종료하려면 Ctrl+C
