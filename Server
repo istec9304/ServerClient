@@ -8,6 +8,7 @@
     - 211.53.249.184:1992 방화벽에 등록
     - 서기대 사무실PC 에서 첫 시험성공
     - 클라이언트는 아무PC 에서나 테스트 해도 동작가능
+    - 싱글쓰레드로 동작 ( 1:1 로만동작 서버<->클라이언트)  -> 멀티스레드로 구현해야 함!
 * Modify   : "2025-04-06"
 * Author   : 서기대
 * Memo     : 첫번째 테스트를 위해 명령어 3개만 만들어 봄
@@ -25,24 +26,40 @@ while ($true) {
     $stream = $client.GetStream()
     $buffer = New-Object byte[] 1024
 
-    $bytesRead = $stream.Read($buffer, 0, $buffer.Length)
-    if ($bytesRead -gt 0) {
-        $message = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $bytesRead)
-        Write-Host "📩 클라이언트로부터 받은 메시지: $message"
+    Write-Host "🔗 클라이언트 접속됨."
 
-        # 응답 메시지 준비
-        $responseText = switch ($message.Trim()) {
-            "AAA" { "가나다" }
-            "BBB" { "라마바" }
-            "CCC" { "마지막" }
-            default { "알 수 없는 명령입니다." }
+    while ($client.Connected -and $stream.CanRead) {
+        try {
+            $bytesRead = $stream.Read($buffer, 0, $buffer.Length)
+            if ($bytesRead -le 0) {
+                break  # 클라이언트가 연결 종료한 경우 루프 탈출
+            }
+
+            $message = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $bytesRead).Trim()
+            Write-Host "📩 클라이언트로부터 받은 메시지: $message"
+
+            # 응답 메시지 준비
+            $responseText = switch ($message) {
+                "AAA" { "가나다" }
+                "BBB" { "라마바" }
+                "CCC" { "마지막" }
+                "exit" {
+                    Write-Host "👋 클라이언트 종료 요청 감지됨."
+                    break
+                }
+                default { "알 수 없는 명령입니다." }
+            }
+
+            # 타임스탬프 포함한 응답 전송
+            $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            $fullResponse = "$timestamp : $responseText"
+            $response = [System.Text.Encoding]::UTF8.GetBytes($fullResponse)
+            $stream.Write($response, 0, $response.Length)
         }
-
-        # 타임스탬프 포함한 응답 전송
-        $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-        $fullResponse = "$timestamp : $responseText"
-        $response = [System.Text.Encoding]::UTF8.GetBytes($fullResponse)
-        $stream.Write($response, 0, $response.Length)
+        catch {
+            Write-Host "⚠️ 예외 발생: $($_.Exception.Message)"
+            break
+        }
     }
 
     $stream.Close()
@@ -50,4 +67,3 @@ while ($true) {
     Write-Host "🔁 다음 클라이언트 대기 중..."
 }
 
-# listener.Stop() 은 따로 안 넣었음 — 강제로 종료하려면 Ctrl+C
